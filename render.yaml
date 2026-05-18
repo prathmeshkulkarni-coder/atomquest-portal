@@ -26,5 +26,17 @@ services:
         generateValue: true
       - key: CYCLE_DEMO_MODE
         value: 'true'
+      - key: AZURE_SSO_DEMO
+        value: 'true'
+      - key: SMTP_LOG
+        value: 'true'
+      - key: APP_URL
+        fromService:
+          type: web
+          name: atomquest-portal
+          property: host
       - key: CORS_ORIGIN
-        sync: false
+        fromService:
+          type: web
+          name: atomquest-portal
+          property: host

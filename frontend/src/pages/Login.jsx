@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { LogIn } from 'lucide-react';
 import Alert from '../components/Alert';
 
@@ -13,6 +13,14 @@ const Login = ({ onLogin }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [ssoEnabled, setSsoEnabled] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/auth/sso/config')
+      .then((r) => r.json())
+      .then((d) => setSsoEnabled(d.enabled === true))
+      .catch(() => {});
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -35,6 +43,39 @@ const Login = ({ onLogin }) => {
     setEmail(demoEmail);
     setPassword('password123');
     setError('');
+  };
+
+  const handleMicrosoftLogin = async () => {
+    if (!email) {
+      setError('Enter your work email, then use Microsoft sign-in (demo maps to portal account).');
+      return;
+    }
+    setError('');
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/sso/demo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const text = await res.text();
+      let data = {};
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch {
+          throw new Error('Invalid server response. Is the backend running?');
+        }
+      }
+      if (!res.ok) throw new Error(data.message || 'SSO failed');
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      window.location.reload();
+    } catch (err) {
+      setError(err.message || 'Microsoft sign-in failed.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -100,6 +141,18 @@ const Login = ({ onLogin }) => {
               <LogIn size={16} />
               {loading ? 'Signing in…' : 'Sign in'}
             </button>
+
+            {ssoEnabled && (
+              <button
+                type="button"
+                className="btn btn-secondary btn-block"
+                style={{ marginTop: '0.75rem' }}
+                disabled={loading}
+                onClick={handleMicrosoftLogin}
+              >
+                Sign in with Microsoft (Entra ID demo)
+              </button>
+            )}
           </form>
 
           <div className="demo-accounts">

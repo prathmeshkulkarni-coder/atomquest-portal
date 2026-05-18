@@ -10,6 +10,7 @@ import { resolveCycleOptions } from '../utils/cycleConfig.js';
 import { assertGoalSettingForRole } from '../utils/cycleGuards.js';
 import { normalizeUomDirection } from '../utils/uom.js';
 import { getSubmitSuccessMessage, canReviewGoalSheet } from '../utils/approvalWorkflow.js';
+import { notifyManagerOfSubmit, notifyEmployeeOfReview } from '../utils/notifications.js';
 
 // Helper to log audit changes
 const logAudit = async (client, goalId, action, oldValue, newValue, userId) => {
@@ -399,6 +400,13 @@ export const submitGoalSheet = async (req, res) => {
     }
 
     await client.query('COMMIT');
+
+    const nameRes = await pool.query('SELECT name FROM users WHERE id = $1', [targetUserId]);
+    const employeeName = nameRes.rows[0]?.name || 'Employee';
+    if (!autoApprove) {
+      notifyManagerOfSubmit(pool, targetUserId, employeeName).catch(console.error);
+    }
+
     res.json({
       message: getSubmitSuccessMessage(subjectRole),
       approver: subjectRole === 'Manager' ? 'Admin' : subjectRole === 'Admin' ? null : 'Manager',
@@ -500,6 +508,10 @@ export const managerReview = async (req, res) => {
       await client.query('COMMIT');
       const subjectNameRes = await pool.query('SELECT name FROM users WHERE id = $1', [employeeId]);
       const subjectName = subjectNameRes.rows[0]?.name || 'Goal sheet';
+      const reviewerRes = await pool.query('SELECT name FROM users WHERE id = $1', [managerId]);
+      notifyEmployeeOfReview(pool, employeeId, 'APPROVE', reviewerRes.rows[0]?.name || 'Manager').catch(
+        console.error
+      );
       return res.json({
         message: `${subjectName}'s goal sheet was approved and locked.`,
         sheetStatus: 'approved',
@@ -518,6 +530,10 @@ export const managerReview = async (req, res) => {
       await client.query('COMMIT');
       const subjectNameRes = await pool.query('SELECT name FROM users WHERE id = $1', [employeeId]);
       const subjectName = subjectNameRes.rows[0]?.name || 'Goal sheet';
+      const reviewerRes = await pool.query('SELECT name FROM users WHERE id = $1', [managerId]);
+      notifyEmployeeOfReview(pool, employeeId, 'REWORK', reviewerRes.rows[0]?.name || 'Manager').catch(
+        console.error
+      );
       return res.json({
         message: `${subjectName}'s sheet was returned for rework (unlocked).`,
         sheetStatus: 'draft',

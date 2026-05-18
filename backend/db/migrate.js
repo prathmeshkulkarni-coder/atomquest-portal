@@ -130,4 +130,49 @@ export const runMigrations = async (pool) => {
       AND m.manager_id IS NULL
       AND EXISTS (SELECT 1 FROM users WHERE role = 'Admin');
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+      type VARCHAR(50) NOT NULL,
+      title VARCHAR(200) NOT NULL,
+      body TEXT NOT NULL,
+      deep_link TEXT,
+      is_read BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS escalation_rules (
+      id SERIAL PRIMARY KEY,
+      rule_type VARCHAR(50) UNIQUE NOT NULL,
+      days_threshold INTEGER NOT NULL DEFAULT 7,
+      enabled BOOLEAN DEFAULT TRUE,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS escalation_logs (
+      id SERIAL PRIMARY KEY,
+      rule_type VARCHAR(50) NOT NULL,
+      subject_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      escalated_to_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      message TEXT NOT NULL,
+      metadata JSONB DEFAULT '{}',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  const ruleCount = await pool.query('SELECT COUNT(*)::int AS n FROM escalation_rules');
+  if (ruleCount.rows[0].n === 0) {
+    await pool.query(`
+      INSERT INTO escalation_rules (rule_type, days_threshold, enabled) VALUES
+        ('GOAL_NOT_SUBMITTED', 7, TRUE),
+        ('MANAGER_NOT_APPROVED', 5, TRUE),
+        ('CHECKIN_INCOMPLETE', 7, TRUE);
+    `);
+  }
 };

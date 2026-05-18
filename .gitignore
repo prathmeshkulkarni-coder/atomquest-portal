@@ -9,3 +9,12 @@ docker-compose.override.yml
 .DS_Store
 coverage/
 .vite/
+
+# Editor / OS junk
+.~lock.*
+*~
+*.swp
+Thumbs.db
+
+# Optional: large PDF-ready HTML (use SUBMISSION.md + architecture-diagram.png instead)
+# SUBMISSION.html

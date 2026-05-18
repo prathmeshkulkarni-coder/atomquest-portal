@@ -2,6 +2,8 @@
 
 ## System overview
 
+![AtomQuest architecture diagram](../architecture-diagram.png)
+
 ```mermaid
 flowchart TB
   subgraph client [Browser]

@@ -1,103 +1,140 @@
-# AtomQuest Goal Setting & Tracking Portal
+# AtomQuest — Goal Setting & Tracking Portal
 
-Full-stack goal management portal for **ATOMQUEST HACKATHON 1.0**: React (Vite) frontend, Express API, PostgreSQL, Docker Compose.
+In-house portal for **ATOMQUEST HACKATHON 1.0**: employees draft weighted goals, managers review and approve sheets, admins run analytics and cycle controls, with quarterly check-ins and BRD-aligned scoring.
 
-## Quick start
+**Stack:** React (Vite) · Express · PostgreSQL · Docker
+
+**Live app:** [https://atomquest-portal-9u7c.onrender.com](https://atomquest-portal-9u7c.onrender.com)
+
+---
+
+## Live demo
+
+| Role | Email | Password |
+|------|-------|----------|
+| Employee | `employee@atomquest.com` | `password123` |
+| Manager | `manager@atomquest.com` | `password123` |
+| Admin | `admin@atomquest.com` | `password123` |
+
+Also seeded: `alex@atomquest.com` (employee, same password).
+
+---
+
+## Features
+
+| Role | Highlights |
+|------|------------|
+| **Employee** | Up to 8 goals (100% weight), Min/Max UoM, submit sheet, quarterly check-ins |
+| **Manager** | Team review, approve/rework, add goals for reports, shared KPIs |
+| **Admin** | Analytics, QoQ charts, escalation rules, integrations, CSV export, unlock sheets |
+
+**Rules:** 8 goals max · each ≥ 10% weight · total = 100% to submit · locked sheets block employee edits.
+
+**Good-to-have (§5):** in-app notifications · Teams webhook · Entra ID demo SSO · rule-based escalations · QoQ analytics.
+
+---
+
+## Quick start (local)
 
 ```bash
-cp .env.example .env   # edit JWT_SECRET for anything beyond local demo
+cp .env.example .env          # set JWT_SECRET for non-demo use
 docker compose up -d --build
 docker compose exec backend npm run seed
 ```
 
-Secrets are read from **`.env`** (gitignored). `docker-compose.yml` only references `${VAR}` placeholders — safe to commit.
-
 | Service | URL |
-| :--- | :--- |
-| Frontend | http://localhost:3000 |
-| API | http://localhost:5000/api/health |
-| Postgres | localhost:5435 |
+|---------|-----|
+| App (UI) | http://localhost:3000 |
+| API health | http://localhost:5000/api/health |
+| Postgres | `localhost:5435` |
 
-**Demo logins** (password `password123`): `employee@atomquest.com`, `manager@atomquest.com`, `admin@atomquest.com`
+`docker-compose.yml` uses `${VAR}` from `.env` only — **never commit `.env`**.
 
-After schema changes, re-run `docker compose exec backend npm run seed`.
+**BRD cycles:** `CYCLE_DEMO_MODE=true` in `.env` opens all quarterly windows for testing. Admin → **Cycle schedule** can toggle enforcement and demo mode.
 
-## BRD §2.3 — Quarterly windows
+---
 
-| Phase | Period | Employee / manager actions |
-| :--- | :--- | :--- |
-| Goal setting & approval | 1 May – 30 Jun | Draft goals, submit sheet, L1 review |
-| Q1 check-in | July | Planned vs actual for Q1 |
-| Q2 check-in | October | Q2 check-ins |
-| Q3 check-in | January | Q3 check-ins |
-| Q4 / Annual | March – April | Q4 and Annual check-ins |
+## Deploy on Render (production)
 
-- **Cycle banner** (all roles): shows the active BRD window.
-- **Admin → Cycle schedule**: toggle *Enforce BRD windows* and *Demo mode* (open all windows for testing).
-- **Docker**: set `CYCLE_DEMO_MODE=true` in `.env` for demo (all windows open); set `false` and disable demo mode in Admin for strict calendar behavior.
+Same app as local, one URL for UI + API (no port 3000/5000 split).
 
-See [docs/architecture.md](docs/architecture.md) for a system diagram.
+| | Local Docker | Render |
+|---|--------------|--------|
+| URL | http://localhost:3000 | https://atomquest-portal-9u7c.onrender.com |
+| Database | Postgres container | Render Postgres (`DATABASE_URL`) |
+| Config | `.env` | `render.yaml` + dashboard |
 
-## Units of measure (Min / Max)
+**Push latest code → auto-redeploy:**
 
-When creating goals (employee or admin shared KPI), pick an explicit direction:
+```bash
+git add .
+git commit -m "Render production: good-to-have features + fixes"
+git push origin main
+```
 
-| Selection | Scoring |
-| :--- | :--- |
-| Numeric / % — **Min** | Higher actual is better: `(actual ÷ target) × 100` |
-| Numeric / % — **Max** | Lower actual is better: `(target ÷ actual) × 100` |
-| Timeline | 100% if actual date ≤ target date |
-| Zero-based | 100% if actual is 0 |
+**First-time or new Blueprint:** [render.com](https://render.com) → **New → Blueprint** → connect repo → Apply.
 
-Non-numeric actuals (e.g. `"Ok"`) produce **0%** score. Status labels do not affect the score.
+On deploy the app **auto-migrates the DB** and **seeds demo users** if empty. Set in Render dashboard (optional):
 
-## Core rules
+- `APP_URL` = your `*.onrender.com` URL (Blueprint sets from service host)
+- `TEAMS_WEBHOOK_URL` = Teams incoming webhook for real cards
+- `AZURE_SSO_DEMO=true` = Microsoft sign-in button on login
 
-- Max **8** goals; each ≥ **10%** weight; total must equal **100%** before submit.
-- Locked sheets block employee edits; managers may adjust targets/weightages during review.
-- Shared KPIs: title/target read-only for recipients; primary owner syncs actuals to clones.
-- Admin: CSV export, unlock sheets, push shared KPIs, cycle settings.
+**Health:** `GET /api/health` on your Render URL.
+
+Details: [docs/DEPLOY.md](docs/DEPLOY.md)
+
+## Local production test (optional)
+
+```bash
+docker compose -f docker-compose.prod.yml up --build
+# → http://localhost:8080 (UI + API together)
+```
+
+---
+
+## Scoring (Min / Max)
+
+| UoM | Direction | Formula |
+|-----|-----------|---------|
+| Numeric / % | **Min** | `(actual ÷ target) × 100` |
+| Numeric / % | **Max** | `(target ÷ actual) × 100` |
+| Timeline | — | 100% if actual date ≤ target |
+| Zero-based | — | 100% if actual is 0 |
+
+---
 
 ## Tests
 
 ```bash
-# Backend (Node built-in test runner)
 cd backend && npm test
-
-# Frontend (Vitest + Testing Library)
 cd frontend && npm install && npm test
 ```
 
-## Go live (production)
+---
 
-See **[docs/DEPLOY.md](docs/DEPLOY.md)** for VPS Docker, Render, and Railway.
+## Project layout
 
-Quick production test locally:
-
-```bash
-docker compose -f docker-compose.prod.yml up --build
-docker compose -f docker-compose.prod.yml exec app node db/seed.js
-# → http://localhost:8080
+```
+frontend/          React UI (Vite)
+backend/           Express API, migrations, seed
+docs/
+  architecture.md  System diagram & flows
+  DEPLOY.md        Production hosting steps
+docker-compose.yml       Dev (UI :3000, API :5000)
+docker-compose.prod.yml  Prod (UI+API :8080)
+Dockerfile.prod          Render / production image
+render.yaml              Render Blueprint
+.env.example             Safe template (commit this)
 ```
 
-## Deliverables checklist
+---
 
-| Item | Location |
-| :--- | :--- |
-| Source code | `frontend/`, `backend/` |
-| Architecture diagram | `docs/architecture.md` |
-| Environment template | `.env.example` |
-| Docker deployment | `docker-compose.yml` |
-| Automated tests | `backend/tests/`, `frontend/src/**/*.test.*` |
+## Docs
 
-## Local development (without Docker)
+- [Architecture](docs/architecture.md) — components, approval flow, quarterly windows
+- [Deploy](docs/DEPLOY.md) — Render, Railway, VPS
 
-```bash
-# Backend
-cd backend && npm install && npm run dev
+---
 
-# Frontend (proxies /api to backend)
-cd frontend && npm install && npm run dev
-```
-
-Set `DATABASE_URL` and `JWT_SECRET` per `.env.example`.
+*ATOMQUEST HACKATHON 1.0 — Goal Setting & Tracking Portal*

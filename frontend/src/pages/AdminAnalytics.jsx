@@ -21,6 +21,11 @@ const AdminAnalytics = ({ token }) => {
   const [weightage, setWeightage] = useState(15);
   const [selectedRecipients, setSelectedRecipients] = useState([]);
   const [cycleSettings, setCycleSettings] = useState(null);
+  const [qoq, setQoq] = useState(null);
+  const [managerEff, setManagerEff] = useState([]);
+  const [escalationRules, setEscalationRules] = useState([]);
+  const [escalationLogs, setEscalationLogs] = useState([]);
+  const [integrations, setIntegrations] = useState(null);
 
   useEffect(() => {
     fetchAdminData();
@@ -36,15 +41,26 @@ const AdminAnalytics = ({ token }) => {
     setError('');
     try {
       const headers = { Authorization: `Bearer ${token}` };
-      const [statsRes, distRes, auditRes, empRes] = await Promise.all([
+      const [statsRes, distRes, auditRes, empRes, qoqRes, meRes, escRules, escLogs, intRes] =
+        await Promise.all([
         fetch('/api/analytics/completion', { headers }),
         fetch('/api/analytics/distribution', { headers }),
         fetch('/api/goals/audit', { headers }),
         fetch('/api/auth/hierarchy', { headers }),
+        fetch('/api/analytics/qoq', { headers }),
+        fetch('/api/analytics/manager-effectiveness', { headers }),
+        fetch('/api/escalations/rules', { headers }),
+        fetch('/api/escalations/logs', { headers }),
+        fetch('/api/integrations/status', { headers }),
       ]);
       if (statsRes.ok) setStats(await statsRes.json());
       if (distRes.ok) setDistribution(await distRes.json());
       if (auditRes.ok) setAuditLogs(await auditRes.json());
+      if (qoqRes.ok) setQoq(await qoqRes.json());
+      if (meRes.ok) setManagerEff(await meRes.json());
+      if (escRules.ok) setEscalationRules(await escRules.json());
+      if (escLogs.ok) setEscalationLogs(await escLogs.json());
+      if (intRes.ok) setIntegrations(await intRes.json());
       if (empRes.ok) {
         const data = await empRes.json();
         setEmployees(data.filter((u) => u.role === 'Employee' || u.role === 'Manager' || u.role === 'Admin'));
@@ -181,6 +197,46 @@ const AdminAnalytics = ({ token }) => {
       count: Number(s.count) || 0,
     })) || [];
 
+  const qoqChartRows =
+    qoq?.organization?.map((q) => ({
+      label: q.quarter,
+      value: Number(q.avg_score) || 0,
+    })) || [];
+
+  const runEscalationDemo = async () => {
+    setError('');
+    try {
+      const res = await fetch('/api/escalations/run?demo=true', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSuccess(data.message || 'Escalation check done.');
+        fetchAdminData();
+      } else setError(data.message || 'Escalation failed');
+    } catch {
+      setError('Unable to run escalation check.');
+    }
+  };
+
+  const saveEscalationRules = async () => {
+    setError('');
+    try {
+      const res = await fetch('/api/escalations/rules', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ rules: escalationRules }),
+      });
+      if (res.ok) {
+        setEscalationRules(await res.json());
+        setSuccess('Escalation rules saved.');
+      } else setError('Could not save rules');
+    } catch {
+      setError('Unable to save escalation rules.');
+    }
+  };
+
   return (
     <div className="page">
       <PageHeader
@@ -200,6 +256,111 @@ const AdminAnalytics = ({ token }) => {
 
       {error && <Alert type="error">{error}</Alert>}
       {success && <Alert type="success">{success}</Alert>}
+
+      <section className="panel">
+        <header className="panel-head">
+          <h2>Integrations (good-to-have)</h2>
+          <p>Email / Teams webhooks and Microsoft Entra ID demo SSO</p>
+        </header>
+        <div className="panel-body">
+          <div className="integration-badges">
+            <span className={`integration-badge ${integrations?.azureSsoDemo ? 'integration-badge--on' : 'integration-badge--off'}`}>
+              Entra ID SSO demo {integrations?.azureSsoDemo ? 'ON' : 'OFF'}
+            </span>
+            <span className={`integration-badge ${integrations?.teamsWebhook ? 'integration-badge--on' : 'integration-badge--off'}`}>
+              Teams webhook {integrations?.teamsWebhook ? 'ON' : 'OFF'}
+            </span>
+            <span className="integration-badge integration-badge--on">In-app notifications ON</span>
+          </div>
+          <p className="text-muted" style={{ marginTop: '0.5rem' }}>
+            Set env: AZURE_SSO_DEMO=true, TEAMS_WEBHOOK_URL, APP_URL. Submit/approve events notify managers and employees with deep links.
+          </p>
+        </div>
+      </section>
+
+      <section className="panel">
+        <header className="panel-head">
+          <h2>Escalation module (§5.3)</h2>
+          <p>Rule-based reminders when sheets or check-ins are overdue</p>
+        </header>
+        <div className="panel-body">
+          <div className="table-wrap" style={{ marginBottom: '1rem' }}>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Rule</th>
+                  <th>Days threshold</th>
+                  <th>Enabled</th>
+                </tr>
+              </thead>
+              <tbody>
+                {escalationRules.map((r, i) => (
+                  <tr key={r.rule_type}>
+                    <td>{r.rule_type.replace(/_/g, ' ')}</td>
+                    <td>
+                      <input
+                        type="number"
+                        className="form-input"
+                        min={0}
+                        style={{ width: '4rem' }}
+                        value={r.days_threshold}
+                        onChange={(e) => {
+                          const next = [...escalationRules];
+                          next[i] = { ...r, days_threshold: parseInt(e.target.value, 10) || 0 };
+                          setEscalationRules(next);
+                        }}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={r.enabled !== false}
+                        onChange={(e) => {
+                          const next = [...escalationRules];
+                          next[i] = { ...r, enabled: e.target.checked };
+                          setEscalationRules(next);
+                        }}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={saveEscalationRules}>
+              Save rules
+            </button>
+            <button type="button" className="btn btn-primary btn-sm" onClick={runEscalationDemo}>
+              Run demo escalation check
+            </button>
+          </div>
+          {escalationLogs.length > 0 && (
+            <div className="table-wrap" style={{ marginTop: '1rem', maxHeight: '200px', overflowY: 'auto' }}>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Rule</th>
+                    <th>Subject</th>
+                    <th>Message</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {escalationLogs.slice(0, 20).map((log) => (
+                    <tr key={log.id}>
+                      <td style={{ fontSize: '0.75rem' }}>{new Date(log.created_at).toLocaleString()}</td>
+                      <td>{log.rule_type}</td>
+                      <td>{log.subject_name || '—'}</td>
+                      <td>{log.message}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </section>
 
       <section className="panel">
         <header className="panel-head">
@@ -320,6 +481,26 @@ const AdminAnalytics = ({ token }) => {
             labelKey="label"
             valueKey="count"
             emptyText="No check-in status data."
+          />
+          <BarChartPanel
+            title="QoQ avg achievement score (§5.4)"
+            subtitle="Organization-wide by quarter"
+            rows={qoqChartRows}
+            labelKey="label"
+            valueKey="value"
+            emptyText="Log check-ins to see QoQ trends."
+          />
+          <BarChartPanel
+            title="Manager effectiveness"
+            subtitle="Approved sheets per manager"
+            rows={managerEff.map((m) => ({
+              label: m.manager_name,
+              value: Number(m.approved_sheets) || 0,
+              total: Number(m.team_size) || 0,
+            }))}
+            labelKey="label"
+            valueKey="value"
+            emptyText="No manager data."
           />
         </div>
       </section>

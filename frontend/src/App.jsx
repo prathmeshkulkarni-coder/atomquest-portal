@@ -5,6 +5,7 @@ import ManagerReview from './pages/ManagerReview';
 import AdminAnalytics from './pages/AdminAnalytics';
 import { LogOut, Sun, Moon } from 'lucide-react';
 import CycleBanner from './components/CycleBanner';
+import NotificationBell from './components/NotificationBell';
 
 const initials = (name) =>
   name
@@ -32,12 +33,29 @@ const App = () => {
   }, [theme]);
 
   const handleLogin = async (email, password) => {
-    const response = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    const data = await response.json();
+    let response;
+    try {
+      response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+    } catch {
+      throw new Error('Cannot reach the API. Start Docker: docker compose up -d');
+    }
+
+    const text = await response.text();
+    let data = {};
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error('Server returned an invalid response. Is the backend running on port 5000?');
+      }
+    } else if (!response.ok) {
+      throw new Error(`Login failed (${response.status}). Backend may be down — run docker compose up -d`);
+    }
+
     if (response.ok) {
       setToken(data.token);
       setUser(data.user);
@@ -101,6 +119,7 @@ const App = () => {
           )}
 
           <div className="nav-actions">
+            <NotificationBell token={token} />
             <div className="user-chip">
               <span className="user-avatar">{initials(user.name)}</span>
               <span className="user-chip-text">

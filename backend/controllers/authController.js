@@ -69,6 +69,55 @@ export const getProfile = async (req, res) => {
   }
 };
 
+/** Good-to-have §5.1 — demo SSO (production would use Entra ID OIDC). */
+export const getSsoConfig = async (req, res) => {
+  res.json({
+    enabled: process.env.AZURE_SSO_DEMO === 'true',
+    provider: 'Microsoft Entra ID (demo)',
+    note: 'Set AZURE_SSO_DEMO=true to show Sign in with Microsoft. Production uses OIDC redirect.',
+  });
+};
+
+export const ssoDemoLogin = async (req, res) => {
+  if (process.env.AZURE_SSO_DEMO !== 'true') {
+    return res.status(404).json({ message: 'SSO demo is not enabled' });
+  }
+
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ message: 'Email is required for SSO demo' });
+  }
+
+  try {
+    const result = await pool.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase().trim()]);
+    if (result.rows.length === 0) {
+      return res.status(401).json({ message: 'No portal account mapped to this Microsoft identity' });
+    }
+
+    const user = result.rows[0];
+    const token = jwt.sign(
+      { id: user.id, name: user.name, email: user.email, role: user.role, sso: true },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        manager_id: user.manager_id,
+      },
+      message: 'Signed in via Microsoft Entra ID (demo mode)',
+    });
+  } catch (error) {
+    console.error('SSO demo login error:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+};
+
 export const getHierarchy = async (req, res) => {
   try {
     // If Admin, get all users. If Manager, get reporting employees. If Employee, get self and team.

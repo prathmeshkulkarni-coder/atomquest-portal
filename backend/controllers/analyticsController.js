@@ -95,6 +95,78 @@ export const getGoalDistribution = async (req, res) => {
   }
 };
 
+/** QoQ average progress score by quarter (bonus analytics §5.4). */
+export const getQoQTrends = async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        c.quarter,
+        COUNT(DISTINCT g.user_id) AS employees_with_data,
+        ROUND(AVG(c.progress_score)::numeric, 2) AS avg_score,
+        ROUND(MAX(c.progress_score)::numeric, 2) AS max_score,
+        COUNT(c.id) AS checkin_count
+      FROM checkins c
+      JOIN goals g ON g.id = c.goal_id
+      JOIN users u ON u.id = g.user_id
+      WHERE u.role IN ('Employee', 'Manager')
+        AND c.progress_score IS NOT NULL
+      GROUP BY c.quarter
+      ORDER BY CASE c.quarter
+        WHEN 'Q1' THEN 1 WHEN 'Q2' THEN 2 WHEN 'Q3' THEN 3 WHEN 'Q4' THEN 4 ELSE 5 END
+    `);
+
+    const teamRes = await pool.query(`
+      SELECT
+        m.name AS manager_name,
+        c.quarter,
+        ROUND(AVG(c.progress_score)::numeric, 2) AS avg_score
+      FROM checkins c
+      JOIN goals g ON g.id = c.goal_id
+      JOIN users u ON u.id = g.user_id
+      JOIN users m ON u.manager_id = m.id
+      WHERE u.role = 'Employee' AND c.progress_score IS NOT NULL
+      GROUP BY m.name, c.quarter
+      ORDER BY m.name, c.quarter
+    `);
+
+    res.json({ organization: result.rows, byManager: teamRes.rows });
+  } catch (error) {
+    console.error('QoQ trends error:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+};
+
+/** Manager check-in completion rates (bonus §5.4). */
+export const getManagerEffectiveness = async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        m.id AS manager_id,
+        m.name AS manager_name,
+        COUNT(DISTINCT u.id) AS team_size,
+        COUNT(DISTINCT CASE WHEN c.id IS NOT NULL AND c.actual_achievement IS NOT NULL
+          AND TRIM(c.actual_achievement) <> '' THEN u.id END) AS employees_with_checkins,
+        COUNT(DISTINCT CASE WHEN u.goal_sheet_status = 'approved' THEN u.id END) AS approved_sheets,
+        ROUND(
+          100.0 * COUNT(DISTINCT CASE WHEN c.manager_comment IS NOT NULL
+            AND TRIM(c.manager_comment) <> '' THEN c.id END)
+          / NULLIF(COUNT(c.id), 0),
+        2) AS comment_rate_pct
+      FROM users m
+      JOIN users u ON u.manager_id = m.id AND u.role = 'Employee'
+      LEFT JOIN goals g ON g.user_id = u.id
+      LEFT JOIN checkins c ON c.goal_id = g.id
+      WHERE m.role = 'Manager'
+      GROUP BY m.id, m.name
+      ORDER BY m.name
+    `);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Manager effectiveness error:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+};
+
 export const exportAchievementCSV = async (req, res) => {
   try {
     // Fetch all goals and join with user details and checkins
