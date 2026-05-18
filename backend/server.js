@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import pool from './config/db.js';
 import { runMigrations } from './db/migrate.js';
+import { seedDemoIfEmpty } from './db/demoData.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -95,8 +96,9 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-// Start Server (run migrations first so API matches code)
+// Start Server (migrations + demo users on empty DB — no Render Shell required)
 runMigrations(pool)
+  .then(() => seedDemoIfEmpty(pool))
   .then(() => {
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`AtomQuest backend server running on http://0.0.0.0:${PORT}`);

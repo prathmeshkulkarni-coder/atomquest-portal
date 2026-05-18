@@ -35,13 +35,11 @@ Optional: put **Caddy** or **Nginx** in front with HTTPS and your domain.
 1. Push code to **GitHub** (include `Dockerfile.prod`, `render.yaml`).
 2. [render.com](https://render.com) → **New** → **Blueprint** → connect repo.
 3. Render creates **Postgres** + **Web Service** from `render.yaml`.
-4. After first deploy, open the web service **Shell** and run once:
-
-   ```bash
-   node db/seed.js
-   ```
+4. Wait until the web service is **Live**. On first start the app **creates tables and demo users automatically** (no Shell tab needed on free tier).
 
 5. Open the URL Render gives you (e.g. `https://atomquest-portal.onrender.com`).
+
+**Optional (local reset):** `node db/seed.js` wipes the DB and reloads demo data — use only for a full reset, not on every deploy.
 
 **Note:** Free tier sleeps after inactivity; first load may take ~30s.
 
@@ -61,11 +59,11 @@ Set `CORS_ORIGIN` in Render dashboard to your public URL if you split frontend/A
 
 ## After deploy (all options)
 
-On first start the app **creates database tables automatically** (no wipe). You still need to load demo users once:
+On first start the app **creates tables and demo users** when the database is empty.
 
 | Step | Command / action |
 |------|------------------|
-| Seed demo users | `node db/seed.js` (once; **wipes DB** and reloads demo data) |
+| Demo users | Automatic on first deploy; or `node db/seed.js` for a **full wipe + reseed** (VPS/Docker only) |
 | Health check | `GET /api/health` |
 | Login | `employee@atomquest.com` / `manager@atomquest.com` / `admin@atomquest.com` — password `password123` |
 
