@@ -1,0 +1,17 @@
+# Production image: Vite build + Express API (one URL for the whole app)
+FROM node:20-alpine AS frontend-build
+WORKDIR /frontend
+COPY frontend/package*.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
+FROM node:20-alpine
+WORKDIR /app
+COPY backend/package*.json ./
+RUN npm ci --omit=dev
+COPY backend/ ./
+COPY --from=frontend-build /frontend/dist ./public
+ENV NODE_ENV=production
+EXPOSE 5000
+CMD ["node", "server.js"]

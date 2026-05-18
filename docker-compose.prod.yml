@@ -1,0 +1,43 @@
+# Production stack: Postgres + single app container (UI + API on port 8080)
+# Usage: cp .env.example .env && docker compose -f docker-compose.prod.yml up -d --build
+services:
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-atomquest_db}
+    volumes:
+      - pgdata_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d atomquest_db']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    restart: unless-stopped
+    ports:
+      - '${APP_PORT:-8080}:5000'
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DB_HOST: db
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      DB_NAME: ${DB_NAME:-atomquest_db}
+      DB_PORT: 5432
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      CYCLE_DEMO_MODE: ${CYCLE_DEMO_MODE:-true}
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata_prod:
